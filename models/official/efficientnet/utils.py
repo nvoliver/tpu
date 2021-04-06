@@ -21,6 +21,7 @@ from __future__ import print_function
 import json
 import os
 import sys
+import inspect
 
 from absl import flags
 from absl import logging
@@ -467,8 +468,21 @@ class EvalCkptDriver(object):
     def _parse_function(filename, label):
       image_string = tf.read_file(filename)
       preprocess_fn = self.get_preprocess_fn()
-      image_decoded = preprocess_fn(
-          image_string, is_training, image_size=self.image_size)
+      if 'resize_method' in inspect.getargspec(preprocess_fn).args:
+          if (FLAGS.model_name.startswith('efficientnet-lite')
+                  or FLAGS.model_name.startswith('efficientnet-edgetpu')):
+              # lite or edgetpu use bilinear for easier post-quantization.
+              resize_method = tf.image.ResizeMethod.BILINEAR
+          else:
+              resize_method = None
+          image_decoded = preprocess_fn(image_string,
+                                        is_training,
+                                        image_size=self.image_size,
+                                        resize_method=resize_method)
+      else:
+          image_decoded = preprocess_fn(image_string,
+                                        is_training,
+                                        image_size=self.image_size)
       image = tf.cast(image_decoded, tf.float32)
       return image, label
 
